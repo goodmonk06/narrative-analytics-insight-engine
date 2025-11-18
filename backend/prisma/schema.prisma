@@ -1,0 +1,68 @@
+// Prisma schema for Narrative Analytics Engine
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model NarrativeContent {
+  id            String   @id @default(cuid())
+  communityId   String
+  sourceType    SourceType
+  sourceRef     String?  // External reference ID
+  title         String
+  bodyMarkdown  String   @db.Text
+  ts            DateTime @default(now())
+  metaJson      Json?    // Additional metadata
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  analysis      NarrativeAnalysis[]
+  engagement    NarrativeEngagement[]
+
+  @@index([communityId])
+  @@index([sourceType])
+  @@index([ts])
+}
+
+enum SourceType {
+  post
+  newsletter
+  talk
+  other
+}
+
+model NarrativeAnalysis {
+  id                  String   @id @default(cuid())
+  contentId           String
+  themesJson          Json     // Array of identified themes
+  toneLabelsJson      Json     // Emotional tone labels
+  archetypeLabelsJson Json     // Story archetypes
+  summaryMarkdown     String   @db.Text
+  aiModelInfoJson     Json     // Model version, timestamp, etc.
+  createdAt           DateTime @default(now())
+
+  content             NarrativeContent @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@index([contentId])
+}
+
+model NarrativeEngagement {
+  id              String   @id @default(cuid())
+  contentId       String
+  views           Int      @default(0)
+  likes           Int      @default(0)
+  comments        Int      @default(0)
+  shares          Int      @default(0)
+  otherMetricsJson Json?   // Additional platform-specific metrics
+  recordedAt      DateTime @default(now())
+
+  content         NarrativeContent @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@index([contentId])
+  @@index([recordedAt])
+}
