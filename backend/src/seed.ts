@@ -229,10 +229,18 @@ But overall, async has transformed our productivity and work-life balance.
 async function main() {
   console.log('🌱 Starting seed...');
 
-  // Clear existing data
-  await prisma.narrativeEngagement.deleteMany();
-  await prisma.narrativeAnalysis.deleteMany();
-  await prisma.narrativeContent.deleteMany();
+  // Clear existing data in correct order
+  console.log('Clearing existing data...');
+  await prisma.contentTag.deleteMany({});
+  await prisma.collectionContent.deleteMany({});
+  await prisma.narrativeEngagement.deleteMany({});
+  await prisma.narrativeAnalysis.deleteMany({});
+  await prisma.narrativeRecommendation.deleteMany({});
+  await prisma.narrativeTrend.deleteMany({});
+  await prisma.tag.deleteMany({});
+  await prisma.narrativeCollection.deleteMany({});
+  await prisma.narrativeContent.deleteMany({});
+  console.log('✓ Cleared old data\n');
 
   const communityId = 'demo-community-001';
 
@@ -246,7 +254,10 @@ async function main() {
         sourceType: item.sourceType,
         title: item.title,
         bodyMarkdown: item.bodyMarkdown,
+        status: 'published',
+        visibility: 'public',
         ts: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000), // Random date in last 30 days
+        publishedAt: new Date()
       },
     });
 
@@ -283,8 +294,121 @@ async function main() {
     console.log(`✓ Created: ${item.title}`);
   }
 
+  console.log(`✓ Created ${sampleContent.length} content pieces\n`);
+
+  // Create collections
+  console.log('Creating collections...');
+  const bestOfCollection = await prisma.narrativeCollection.create({
+    data: {
+      communityId,
+      name: 'Best of 2024',
+      slug: 'best-of-2024',
+      description: 'Our highest-performing content from 2024',
+    },
+  });
+
+  const engineeringCollection = await prisma.narrativeCollection.create({
+    data: {
+      communityId,
+      name: 'Engineering Insights',
+      slug: 'engineering-insights',
+      description: 'Technical deep dives and engineering wisdom',
+    },
+  });
+
+  // Add content to collections
+  const allContent = await prisma.narrativeContent.findMany({ where: { communityId } });
+  await prisma.collectionContent.createMany({
+    data: [
+      { collectionId: bestOfCollection.id, contentId: allContent[3].id, order: 0 },
+      { collectionId: bestOfCollection.id, contentId: allContent[2].id, order: 1 },
+      { collectionId: engineeringCollection.id, contentId: allContent[1].id, order: 0 },
+      { collectionId: engineeringCollection.id, contentId: allContent[2].id, order: 1 },
+    ],
+  });
+
+  console.log('✓ Created 2 collections with content\n');
+
+  // Create tags
+  console.log('Creating tags...');
+  const tags = await prisma.tag.createMany({
+    data: [
+      { communityId, name: 'Engineering', slug: 'engineering', category: 'topic' },
+      { communityId, name: 'Leadership', slug: 'leadership', category: 'topic' },
+      { communityId, name: 'Remote Work', slug: 'remote-work', category: 'topic' },
+      { communityId, name: 'Beginner', slug: 'beginner', category: 'audience' },
+      { communityId, name: 'Advanced', slug: 'advanced', category: 'audience' },
+      { communityId, name: 'Case Study', slug: 'case-study', category: 'format' },
+      { communityId, name: 'Tutorial', slug: 'tutorial', category: 'format' },
+    ],
+  });
+
+  const allTags = await prisma.tag.findMany({ where: { communityId } });
+  await prisma.contentTag.createMany({
+    data: [
+      { contentId: allContent[1].id, tagId: allTags[0].id }, // Technical Debt -> Engineering
+      { contentId: allContent[2].id, tagId: allTags[0].id }, // API Scaling -> Engineering
+      { contentId: allContent[0].id, tagId: allTags[1].id }, // Innovation -> Leadership
+      { contentId: allContent[5].id, tagId: allTags[2].id }, // Async Comm -> Remote Work
+      { contentId: allContent[2].id, tagId: allTags[5].id }, // API Scaling -> Case Study
+    ],
+  });
+
+  console.log('✓ Created 7 tags and tagged content\n');
+
+  // Generate sample recommendations
+  console.log('Creating recommendations...');
+  await prisma.narrativeRecommendation.createMany({
+    data: [
+      {
+        communityId,
+        type: 'theme_exploration',
+        title: 'Explore "AI" theme more',
+        description: 'AI-related topics are showing strong engagement in similar communities. Consider creating content around machine learning, automation, and AI ethics.',
+        score: 0.82,
+        basedOnContentIds: [allContent[0].id, allContent[1].id],
+        suggestedThemes: ['artificial intelligence', 'machine learning', 'automation'],
+        suggestedTones: ['analytical', 'forward-looking'],
+      },
+      {
+        communityId,
+        type: 'tone_adjustment',
+        title: 'Try "conversational" tone',
+        description: 'Your analytical content performs well, but you haven\'t tried a more conversational tone. This could help with accessibility and broader reach.',
+        score: 0.65,
+        basedOnContentIds: [],
+        suggestedThemes: [],
+        suggestedTones: ['conversational', 'friendly', 'accessible'],
+      },
+      {
+        communityId,
+        type: 'content_format',
+        title: 'Create video content',
+        description: 'All your content is text-based. Video content could reach a different audience segment and boost overall engagement.',
+        score: 0.58,
+        basedOnContentIds: [],
+        suggestedThemes: [],
+        suggestedTones: [],
+        metaJson: { suggestedFormats: ['video', 'podcast'] },
+      },
+    ],
+  });
+
+  console.log('✓ Created 3 recommendations\n');
+
   console.log('✅ Seed completed successfully!');
-  console.log(`📊 Created ${sampleContent.length} pieces of content with analyses and engagement metrics`);
+  console.log('━'.repeat(50));
+  console.log('📊 Summary:');
+  console.log(`   Content pieces: ${sampleContent.length}`);
+  console.log(`   Collections: 2`);
+  console.log(`   Tags: 7`);
+  console.log(`   Recommendations: 3`);
+  console.log('━'.repeat(50));
+  console.log('\n💡 Next steps:');
+  console.log('   1. Start the dev server: npm run dev');
+  console.log('   2. Visit the dashboard: http://localhost:3000');
+  console.log('   3. Explore the API: http://localhost:3001/health');
+  console.log('   4. View database: npm run db:studio\n');
 }
 
 main()

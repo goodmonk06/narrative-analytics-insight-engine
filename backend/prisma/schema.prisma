@@ -17,23 +17,48 @@ model NarrativeContent {
   title         String
   bodyMarkdown  String   @db.Text
   ts            DateTime @default(now())
+  status        ContentStatus @default(draft)
+  visibility    ContentVisibility @default(public)
+  authorId      String?  // Optional author reference
   metaJson      Json?    // Additional metadata
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  publishedAt   DateTime?
+  archivedAt    DateTime?
 
   analysis      NarrativeAnalysis[]
   engagement    NarrativeEngagement[]
+  collections   CollectionContent[]
+  tags          ContentTag[]
 
   @@index([communityId])
   @@index([sourceType])
   @@index([ts])
+  @@index([status])
+  @@index([authorId])
 }
 
 enum SourceType {
   post
   newsletter
   talk
+  article
+  video
+  podcast
   other
+}
+
+enum ContentStatus {
+  draft
+  published
+  archived
+  deleted
+}
+
+enum ContentVisibility {
+  public
+  private
+  unlisted
 }
 
 model NarrativeAnalysis {
@@ -65,4 +90,134 @@ model NarrativeEngagement {
 
   @@index([contentId])
   @@index([recordedAt])
+}
+
+// Collections for organizing content
+model NarrativeCollection {
+  id          String   @id @default(cuid())
+  communityId String
+  name        String
+  description String?  @db.Text
+  slug        String
+  metaJson    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  contents    CollectionContent[]
+
+  @@unique([communityId, slug])
+  @@index([communityId])
+}
+
+model CollectionContent {
+  id           String   @id @default(cuid())
+  collectionId String
+  contentId    String
+  order        Int      @default(0)
+  addedAt      DateTime @default(now())
+
+  collection   NarrativeCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  content      NarrativeContent @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, contentId])
+  @@index([collectionId])
+  @@index([contentId])
+}
+
+// Flexible tagging system
+model Tag {
+  id          String   @id @default(cuid())
+  communityId String
+  name        String
+  slug        String
+  category    String?  // e.g., "topic", "audience", "format"
+  createdAt   DateTime @default(now())
+
+  contents    ContentTag[]
+
+  @@unique([communityId, slug])
+  @@index([communityId])
+  @@index([category])
+}
+
+model ContentTag {
+  id        String   @id @default(cuid())
+  contentId String
+  tagId     String
+  addedAt   DateTime @default(now())
+
+  content   NarrativeContent @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  tag       Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([contentId, tagId])
+  @@index([contentId])
+  @@index([tagId])
+}
+
+// Time-series tracking of theme performance
+model NarrativeTrend {
+  id              String   @id @default(cuid())
+  communityId     String
+  theme           String
+  periodStart     DateTime
+  periodEnd       DateTime
+  granularity     TrendGranularity
+  contentCount    Int      @default(0)
+  totalViews      Int      @default(0)
+  totalLikes      Int      @default(0)
+  totalComments   Int      @default(0)
+  totalShares     Int      @default(0)
+  avgEngagementScore Float @default(0)
+  metaJson        Json?
+  createdAt       DateTime @default(now())
+
+  @@unique([communityId, theme, periodStart, granularity])
+  @@index([communityId])
+  @@index([theme])
+  @@index([periodStart])
+}
+
+enum TrendGranularity {
+  hourly
+  daily
+  weekly
+  monthly
+}
+
+// AI-generated recommendations
+model NarrativeRecommendation {
+  id              String   @id @default(cuid())
+  communityId     String
+  type            RecommendationType
+  title           String
+  description     String   @db.Text
+  score           Float    // 0-1 confidence score
+  basedOnContentIds String[] // Array of content IDs used for recommendation
+  suggestedThemes String[] // Suggested themes to explore
+  suggestedTones  String[]
+  metaJson        Json?
+  status          RecommendationStatus @default(active)
+  createdAt       DateTime @default(now())
+  dismissedAt     DateTime?
+  appliedAt       DateTime?
+
+  @@index([communityId])
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum RecommendationType {
+  theme_exploration      // Suggest exploring a new theme
+  tone_adjustment        // Suggest trying a different tone
+  content_format         // Suggest a different format
+  timing_optimization    // Suggest better timing
+  engagement_boost       // Suggest ways to boost engagement
+}
+
+enum RecommendationStatus {
+  active
+  dismissed
+  applied
+  expired
 }

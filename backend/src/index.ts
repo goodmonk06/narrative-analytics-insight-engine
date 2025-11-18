@@ -1,22 +1,22 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { PrismaClient } from '@prisma/client';
+import { errorHandler } from './lib/errors';
+import { logger } from './lib/logger';
+import { metrics } from './lib/metrics';
 import contentRoutes from './routes/content';
 import analysisRoutes from './routes/analysis';
 import engagementRoutes from './routes/engagement';
 import insightRoutes from './routes/insights';
+import collectionRoutes from './routes/collections';
+import tagRoutes from './routes/tags';
+import trendRoutes from './routes/trends';
+import recommendationRoutes from './routes/recommendations';
 
 const prisma = new PrismaClient();
 const fastify = Fastify({
-  logger: {
-    transport: {
-      target: 'pino-pretty',
-      options: {
-        translateTime: 'HH:MM:ss Z',
-        ignore: 'pid,hostname',
-      },
-    },
-  },
+  logger: logger as any,
+  disableRequestLogging: false,
 });
 
 // Register CORS
@@ -27,9 +27,34 @@ fastify.register(cors, {
 // Attach Prisma to Fastify instance
 fastify.decorate('prisma', prisma);
 
-// Health check
+// Set error handler
+fastify.setErrorHandler(errorHandler);
+
+// Health check with detailed info
 fastify.get('/health', async () => {
-  return { status: 'ok', timestamp: new Date().toISOString() };
+  try {
+    // Test database connection
+    await prisma.$queryRaw`SELECT 1`;
+
+    return {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV || 'development',
+      version: '1.0.0',
+    };
+  } catch (error) {
+    return {
+      status: 'degraded',
+      timestamp: new Date().toISOString(),
+      error: 'Database connection failed',
+    };
+  }
+});
+
+// Metrics endpoint
+fastify.get('/metrics', async () => {
+  return metrics.getMetrics();
 });
 
 // Register routes
@@ -37,6 +62,10 @@ fastify.register(contentRoutes, { prefix: '/api/content' });
 fastify.register(analysisRoutes, { prefix: '/api/analysis' });
 fastify.register(engagementRoutes, { prefix: '/api/engagement' });
 fastify.register(insightRoutes, { prefix: '/api/insights' });
+fastify.register(collectionRoutes, { prefix: '/api/collections' });
+fastify.register(tagRoutes, { prefix: '/api/tags' });
+fastify.register(trendRoutes, { prefix: '/api/trends' });
+fastify.register(recommendationRoutes, { prefix: '/api/recommendations' });
 
 // Start server
 const start = async () => {
